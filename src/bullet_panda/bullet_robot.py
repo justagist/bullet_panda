@@ -58,7 +58,7 @@ class BulletRobot(object):
             self._ee_link_name = config['ee_link_name']
             self._ee_link_idx = config['ee_link_idx']
         else:
-            self._ee_link_name, self._ee_link_idx = self._use_last_defined_link()
+            self._ee_link_idx, self._ee_link_name = self._use_last_defined_link()
 
         self._joint_limits = self.get_joint_limits()
 
@@ -97,6 +97,8 @@ class BulletRobot(object):
         state['ee_point'], state['ee_ori'] = self.ee_pose()
 
         state['ee_vel'], state['ee_omg'] = self.ee_velocity()
+
+        return state
 
 
     def jacobian(self, joint_angles=None):
@@ -379,8 +381,8 @@ class BulletRobot(object):
 
             joint_efforts.append(joint_state[3])
 
-        return np.array(joint_angles), np.array(joint_velocities), np.array(joint_reaction_forces), np.array(
-            joint_efforts)
+        return np.array(joint_angles)[:-1], np.array(joint_velocities)[:-1], np.array(joint_reaction_forces)[:-1], np.array(
+            joint_efforts)[:-1]
 
     def set_joint_angles(self, joint_angles, joint_indices):
         """
