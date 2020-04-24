@@ -1,3 +1,4 @@
+import os
 import time
 
 import numpy as np
@@ -6,19 +7,9 @@ from bullet_robot import BulletRobot
 import logging
 from robot_config import ROBOT_CONFIG
 
-try:
-    import rospkg
 
-    rospack = rospkg.RosPack()
-    rospack.list() 
-
-    # description_path = rospack.get_path('aml_grasp')+"/src/aml_grasp/models/sawyer/sawyer2_with_pisa_hand.urdf"
-    description_path = rospack.get_path('franka_panda_description')+"/robots/panda_arm.urdf"
-except Exception as e:
-    # print e
-    logging.warn("{}\nSpecify path to panda_arm.urdf file when using PandaArm instance.\n\n".format(e))
-    description_path = None
-
+description_path = os.path.dirname(os.path.abspath(__file__)) + "/models/panda_arm.urdf"
+print description_path
 
 class PandaArm(BulletRobot):
 

@@ -7,7 +7,6 @@ Although, this package is structured as a ROS package, it can be used without RO
 ## Dependencies:
 
 - [PyBullet](https://www.pybullet.org) (`pip install pybullet`)
-- Requires the robot description URDF file ([*franka_panda_description*](https://github.com/justagist/franka_panda_description))
 
 ## Related Packages
 - [*panda_simulator*](https://github.com/justagist/panda_simulator) : Simulation in Gazebo with exposed controllers and state feedback using ROS topics and services. The simulated robot uses the same ROS topics and services as the real robot when using the [*franka_ros_interface*](https://github.com/justagist/franka_ros_interface).
