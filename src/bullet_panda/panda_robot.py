@@ -91,6 +91,8 @@ class PandaArm(BulletRobot):
 
         self._ready = True
 
+        print "\n\n\n\nCREATED\n\n\n"
+
 
     def exec_position_cmd(self, cmd):
         """

@@ -37,7 +37,7 @@ class BulletRobot(object):
 
         self._id = robot_id
 
-        pb.setGravity(0.0, 0.0 ,-9.8, physicsClientId = self._uid)
+        pb.setGravity(0.0, 0.0 ,0.0, physicsClientId = self._uid)
         pb.setRealTimeSimulation(1, physicsClientId = self._uid)
         pb.setTimeStep(0.01, physicsClientId = self._uid)
 
@@ -60,7 +60,22 @@ class BulletRobot(object):
         else:
             self._ee_link_idx, self._ee_link_name = self._use_last_defined_link()
 
+        print "HERE", self._ee_link_idx, self._ee_link_name
+
         self._joint_limits = self.get_joint_limits()
+
+        self._ft_joints = [self._all_joints[-1]]
+        self.set_ft_sensor_at(self._ft_joints[0]) # by default, set FT sensor at last fixed joint
+
+
+    def set_ft_sensor_at(self, joint_id, enable = True):
+        if joint_id in self._ft_joints and not enable:
+            self._ft_joints.remove(joint_id)
+        elif joint_id not in self._ft_joints and enable:
+            self._ft_joints.append(joint_id)
+
+        pb.enableJointForceTorqueSensor(self._id, joint_id, enable, self._uid)
+
 
     def _use_last_defined_link(self):
         joint_information = pb.getJointInfo(self._id, self._all_joints[-1], physicsClientId = self._uid)
@@ -97,6 +112,15 @@ class BulletRobot(object):
         state['ee_point'], state['ee_ori'] = self.ee_pose()
 
         state['ee_vel'], state['ee_omg'] = self.ee_velocity()
+
+        tip_state = {}
+        ft_joint_state = pb.getJointState(self._id, max(self._ft_joints), physicsClientId = self._uid)
+        ft=np.asarray(ft_joint_state[2])
+
+        tip_state['force'] = ft[:3]
+        tip_state['torque']= ft[3:]
+
+        state['tip_state'] = tip_state
 
         return state
 
@@ -147,6 +171,29 @@ class BulletRobot(object):
 
         return self.get_link_velocity(link_id=self._ee_link_idx)
 
+    def get_ee_wrench(self, local=False):
+        '''
+            End effector forces and torques.
+            Returns [fx, fy, fz, tx, ty, tz]
+        '''
+
+        _, _,jnt_reaction_force, _ = self.get_joint_state(self._ft_joints[-1])
+
+        if local:
+            ee_pos, ee_ori = self.ee_pose()
+
+            jnt_reaction_force = np.asarray(jnt_reaction_force)
+            force  = tuple(jnt_reaction_force[:3])
+            torque = tuple(jnt_reaction_force[3:])
+
+            inv_ee_pos, inv_ee_ori = pb.invertTransform(ee_pos, [ee_ori.x,ee_ori.y,ee_ori.z,ee_ori.w])
+            
+            force, _  = pb.multiplyTransforms(inv_ee_pos, inv_ee_ori, force, (0,0,0,1))
+            torque, _ = pb.multiplyTransforms(inv_ee_pos, inv_ee_ori, torque, (0,0,0,1))
+            jnt_reaction_force = force + torque
+
+        return jnt_reaction_force
+
     def inertia(self, joint_angles=None):
         """
         
@@ -178,11 +225,12 @@ class BulletRobot(object):
                                                      targetPosition=position, physicsClientId = self._uid)
         else:
 
-            orientation = [orientation[1], orientation[2], orientation[3], orientation[0]]
+            orientation = [orientation.x, orientation.y, orientation.z, orientation.w]
             solution = pb.calculateInverseKinematics(self._id,
                                                      self._ee_link_idx,
                                                      targetPosition=position,
-                                                     targetOrientation=orientation, physicsClientId = self._uid)
+                                                     targetOrientation=orientation, physicsClientId = self._uid,
+                                                     restPoses=self._untuck)
 
         return np.array(solution), solution is None
 
@@ -266,8 +314,9 @@ class BulletRobot(object):
 
         if joints is None:
             joints = self._movable_joints
-
-        pb.setJointMotorControlArray(self._id, joints, controlMode=pb.TORQUE_CONTROL, forces=cmd, physicsClientId = self._uid)
+            
+        # print joints, cmd
+        pb.setJointMotorControlArray(self._id, joints, controlMode=pb.TORQUE_CONTROL, forces=cmd.tolist(), physicsClientId = self._uid)
 
     def set_joint_positions_delta(self, cmd, joints=None, forces=None):
 
@@ -299,7 +348,7 @@ class BulletRobot(object):
         """
         vels = [0.0005 for n in range(len(cmd))]
         pb.setJointMotorControlArray(self._id, joints, controlMode=pb.POSITION_CONTROL,
-                                     targetPositions=cmd, targetVelocities=vels, physicsClientId = self._uid)
+                                     targetPositions=cmd, targetVelocities=vels, physicsClientId = self._uid, forces=[20]*7)
 
     def get_joint_info(self):
         """
@@ -321,7 +370,7 @@ class BulletRobot(object):
 
     def get_link_pose(self, link_id=-3):
         """
-        @return Pose of link (Cartesian positionof center of mass, 
+        @return Pose of link (Cartesian position of center of mass, 
                             Cartesian orientation of center of mass in quaternion [x,y,z,w]) 
         @rtype [np.ndarray, np.quaternion]
 
@@ -359,32 +408,46 @@ class BulletRobot(object):
 
         return lin_vel, ang_vel
 
-    def get_joint_state(self):
+    def get_joint_state(self, joint_id = None):
         """
         @return joint positions, velocity, reaction forces, joint efforts as given from
                 bullet physics
         @rtype: [np.ndarray, np.ndarray, np.ndarray, np.ndarray]
         """
-        joint_angles = []
-        joint_velocities = []
-        joint_reaction_forces = []
-        joint_efforts = []
+        if joint_id is None:
+            joint_angles = []
+            joint_velocities = []
+            joint_reaction_forces = []
+            joint_efforts = []
 
-        for idx in self._all_joints:
-            joint_state = pb.getJointState(self._id, idx, physicsClientId = self._uid)
+            for idx in self._movable_joints:
+                joint_state = pb.getJointState(self._id, idx, physicsClientId = self._uid)
 
-            joint_angles.append(joint_state[0])
+                joint_angles.append(joint_state[0])
 
-            joint_velocities.append(joint_state[1])
+                joint_velocities.append(joint_state[1])
 
-            joint_reaction_forces.append(joint_state[2])
+                joint_reaction_forces.append(joint_state[2])
 
-            joint_efforts.append(joint_state[3])
+                joint_efforts.append(joint_state[3])
 
-        return np.array(joint_angles)[:-1], np.array(joint_velocities)[:-1], np.array(joint_reaction_forces)[:-1], np.array(
-            joint_efforts)[:-1]
+            return np.array(joint_angles), np.array(joint_velocities), np.array(joint_reaction_forces), np.array(
+                joint_efforts)
+        
+        else:
+            jnt_state = pb.getJointState(self._id, joint_id, physicsClientId=self._uid)
+                
+            jnt_poss = jnt_state[0]
+            
+            jnt_vels = jnt_state[1]
+            
+            jnt_reaction_forces = jnt_state[2]
+            
+            jnt_applied_torques = jnt_state[3]
 
-    def set_joint_angles(self, joint_angles, joint_indices):
+            return jnt_poss, jnt_vels, np.array(jnt_reaction_forces), jnt_applied_torques
+
+    def set_joint_angles(self, joint_angles, joint_indices = None):
         """
         Set joint positions. Note: will hard reset the joints, no controllers used.
 
@@ -392,6 +455,9 @@ class BulletRobot(object):
         @type cmd   : [float] * self._nu
 
         """
+
+        if joint_indices is None:
+            joint_indices = self._movable_joints
 
         for i, jnt_idx in enumerate(joint_indices):
             pb.resetJointState(self._id, jnt_idx, joint_angles[i], physicsClientId = self._uid)
@@ -406,7 +472,6 @@ class BulletRobot(object):
         for i in self._all_joints:
             joint_info = pb.getJointInfo(self._id, i, physicsClientId = self._uid)
             q_index = joint_info[3]
-            joint_name = joint_info[1]
             if q_index > -1:
                 movable_joints.append(i)
 
@@ -504,8 +569,8 @@ class BulletRobot(object):
 
             else:
 
-                pb.setJointMotorControl2(self._id, jnt_index, pb.VELOCITY_CONTROL,
-                                         targetPosition=angles[k], force=0.5, physicsClientId = self._uid)
+                pb.setJointMotorControl2(self._id, jnt_index, pb.VELOCITY_CONTROL, 
+                                         force=0.1, physicsClientId=self._uid)
 
     def triangle_mesh(self):
 
