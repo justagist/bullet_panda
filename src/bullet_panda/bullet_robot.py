@@ -15,7 +15,6 @@ class BulletRobot(object):
         :type uid: int
         """
 
-
         # if uid is None:
         #     uid = pb.connect(pb.SHARED_MEMORY)
         #     if uid < 0:
@@ -69,10 +68,10 @@ class BulletRobot(object):
         self._joint_limits = self.get_joint_limits()
 
         self._ft_joints = [self._all_joints[-1]]
-        self.set_ft_sensor_at(self._ft_joints[0]) # by default, set FT sensor at last fixed joint
+        # by default, set FT sensor at last fixed joint
+        self.set_ft_sensor_at(self._ft_joints[0])
 
-
-    def set_ft_sensor_at(self, joint_id, enable = True):
+    def set_ft_sensor_at(self, joint_id, enable=True):
         if joint_id in self._ft_joints and not enable:
             self._ft_joints.remove(joint_id)
         elif joint_id not in self._ft_joints and enable:
@@ -125,11 +124,12 @@ class BulletRobot(object):
         state['ee_vel'], state['ee_omg'] = self.ee_velocity()
 
         tip_state = {}
-        ft_joint_state = pb.getJointState(self._id, max(self._ft_joints), physicsClientId = self._uid)
-        ft=np.asarray(ft_joint_state[2])
+        ft_joint_state = pb.getJointState(self._id, max(
+            self._ft_joints), physicsClientId=self._uid)
+        ft = np.asarray(ft_joint_state[2])
 
         tip_state['force'] = ft[:3]
-        tip_state['torque']= ft[3:]
+        tip_state['torque'] = ft[3:]
 
         state['tip_state'] = tip_state
 
@@ -189,19 +189,22 @@ class BulletRobot(object):
             Returns [fx, fy, fz, tx, ty, tz]
         '''
 
-        _, _,jnt_reaction_force, _ = self.get_joint_state(self._ft_joints[-1])
+        _, _, jnt_reaction_force, _ = self.get_joint_state(self._ft_joints[-1])
 
         if local:
             ee_pos, ee_ori = self.ee_pose()
 
             jnt_reaction_force = np.asarray(jnt_reaction_force)
-            force  = tuple(jnt_reaction_force[:3])
+            force = tuple(jnt_reaction_force[:3])
             torque = tuple(jnt_reaction_force[3:])
 
-            inv_ee_pos, inv_ee_ori = pb.invertTransform(ee_pos, [ee_ori.x,ee_ori.y,ee_ori.z,ee_ori.w])
-            
-            force, _  = pb.multiplyTransforms(inv_ee_pos, inv_ee_ori, force, (0,0,0,1))
-            torque, _ = pb.multiplyTransforms(inv_ee_pos, inv_ee_ori, torque, (0,0,0,1))
+            inv_ee_pos, inv_ee_ori = pb.invertTransform(
+                ee_pos, [ee_ori.x, ee_ori.y, ee_ori.z, ee_ori.w])
+
+            force, _ = pb.multiplyTransforms(
+                inv_ee_pos, inv_ee_ori, force, (0, 0, 0, 1))
+            torque, _ = pb.multiplyTransforms(
+                inv_ee_pos, inv_ee_ori, torque, (0, 0, 0, 1))
             jnt_reaction_force = force + torque
 
         return jnt_reaction_force
@@ -424,7 +427,7 @@ class BulletRobot(object):
 
         return lin_vel, ang_vel
 
-    def get_joint_state(self, joint_id = None):
+    def get_joint_state(self, joint_id=None):
         """
         :return: joint positions, velocity, reaction forces, joint efforts as given from
                 bullet physics
@@ -437,7 +440,8 @@ class BulletRobot(object):
             joint_efforts = []
 
             for idx in self._movable_joints:
-                joint_state = pb.getJointState(self._id, idx, physicsClientId = self._uid)
+                joint_state = pb.getJointState(
+                    self._id, idx, physicsClientId=self._uid)
 
                 joint_angles.append(joint_state[0])
 
@@ -449,16 +453,17 @@ class BulletRobot(object):
 
             return np.array(joint_angles), np.array(joint_velocities), np.array(joint_reaction_forces), np.array(
                 joint_efforts)
-        
+
         else:
-            jnt_state = pb.getJointState(self._id, joint_id, physicsClientId=self._uid)
-                
+            jnt_state = pb.getJointState(
+                self._id, joint_id, physicsClientId=self._uid)
+
             jnt_poss = jnt_state[0]
-            
+
             jnt_vels = jnt_state[1]
-            
+
             jnt_reaction_forces = jnt_state[2]
-            
+
             jnt_applied_torques = jnt_state[3]
 
             return jnt_poss, jnt_vels, np.array(jnt_reaction_forces), jnt_applied_torques
