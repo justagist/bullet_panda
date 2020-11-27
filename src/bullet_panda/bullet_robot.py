@@ -5,7 +5,7 @@ import quaternion
 
 
 class BulletRobot(object):
-    def __init__(self, description_path, uid = None, config = None):
+    def __init__(self, description_path, uid = None, config = None, realtime_sim=False):
         """
         @param robot_description: path to description file (urdf, .bullet, etc.)
         @param config           : optional config file for specifying robot information 
@@ -38,8 +38,10 @@ class BulletRobot(object):
         self._id = robot_id
 
         pb.setGravity(0.0, 0.0 ,0.0, physicsClientId = self._uid)
-        pb.setRealTimeSimulation(1, physicsClientId = self._uid)
-        pb.setTimeStep(0.01, physicsClientId = self._uid)
+        if realtime_sim:
+            pb.setRealTimeSimulation(1, physicsClientId = self._uid)
+            pb.setTimeStep(0.01, physicsClientId = self._uid)
+        self._rt_sim = realtime_sim
 
         self._all_joints = np.array(range(pb.getNumJoints(self._id, physicsClientId = self._uid)))
 
@@ -67,6 +69,12 @@ class BulletRobot(object):
         self._ft_joints = [self._all_joints[-1]]
         self.set_ft_sensor_at(self._ft_joints[0]) # by default, set FT sensor at last fixed joint
 
+    def step_sim(self):
+        pb.stepSimulation(self._uid)
+
+    def step_if_not_rtsim(self):
+        if self._rt_sim:
+            self.step_sim()
 
     def set_ft_sensor_at(self, joint_id, enable = True):
         if joint_id in self._ft_joints and not enable:
@@ -559,18 +567,16 @@ class BulletRobot(object):
         angles = self.angles()
 
         for k, jnt_index in enumerate(self._movable_joints):
-
             pb.resetJointState(self._id, jnt_index, angles[k], physicsClientId = self._uid)
 
-            if ctrl_type == 'pos':
+        if ctrl_type == 'pos':
 
-                pb.setJointMotorControl2(self._id, jnt_index, pb.POSITION_CONTROL,
-                                         targetPosition=angles[k], force=500, physicsClientId = self._uid)
+            pb.setJointMotorControlArray(self._id, self._movable_joints, pb.POSITION_CONTROL,
+                                         targetPosition=angles, forces=[500]*len(self._movable_joints), physicsClientId = self._uid)
 
-            else:
-
-                pb.setJointMotorControl2(self._id, jnt_index, pb.VELOCITY_CONTROL, 
-                                         force=0.1, physicsClientId=self._uid)
+        else:
+            pb.setJointMotorControlArray(self._id, self._movable_joints, pb.VELOCITY_CONTROL, 
+                                    forces=[0.0]*len(self._movable_joints), physicsClientId=self._uid)
 
     def triangle_mesh(self):
 
