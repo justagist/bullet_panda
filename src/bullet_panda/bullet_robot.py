@@ -62,8 +62,6 @@ class BulletRobot(object):
         else:
             self._ee_link_idx, self._ee_link_name = self._use_last_defined_link()
 
-        print "HERE", self._ee_link_idx, self._ee_link_name
-
         self._joint_limits = self.get_joint_limits()
 
         self._ft_joints = [self._all_joints[-1]]
