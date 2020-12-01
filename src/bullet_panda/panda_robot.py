@@ -74,7 +74,7 @@ class PandaArm(BulletRobot):
 
         self._joint_names = ['panda_joint%s' % (s,) for s in range(1, 8)]
 
-        BulletRobot.__init__(self, robot_description, uid=uid)
+        BulletRobot.__init__(self, robot_description, uid=uid, **kwargs)
 
         all_joint_dict = self.get_joint_dict()
 

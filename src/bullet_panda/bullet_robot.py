@@ -4,7 +4,7 @@ import quaternion
 
 
 class BulletRobot(object):
-    def __init__(self, description_path, uid=None, config=None):
+    def __init__(self, description_path, uid=None, config=None, realtime_sim=False):
         """
         :param description_path: path to description file (urdf, .bullet, etc.)
         :param config: optional config file for specifying robot information 
