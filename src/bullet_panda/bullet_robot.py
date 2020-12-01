@@ -39,9 +39,11 @@ class BulletRobot(object):
 
         self._id = robot_id
 
-        pb.setGravity(0.0, 0.0, -9.8, physicsClientId=self._uid)
-        pb.setRealTimeSimulation(1, physicsClientId=self._uid)
-        pb.setTimeStep(0.01, physicsClientId=self._uid)
+        pb.setGravity(0.0, 0.0, 0.0, physicsClientId=self._uid)
+        if realtime_sim:
+            pb.setRealTimeSimulation(1, physicsClientId=self._uid)
+            pb.setTimeStep(0.01, physicsClientId=self._uid)
+        self._rt_sim = realtime_sim
 
         self._all_joints = np.array(
             range(pb.getNumJoints(self._id, physicsClientId=self._uid)))
@@ -68,8 +70,16 @@ class BulletRobot(object):
         self._joint_limits = self.get_joint_limits()
 
         self._ft_joints = [self._all_joints[-1]]
+
         # by default, set FT sensor at last fixed joint
         self.set_ft_sensor_at(self._ft_joints[0])
+
+    def step_sim(self):
+        pb.stepSimulation(self._uid)
+
+    def step_if_not_rtsim(self):
+        if self._rt_sim:
+            self.step_sim()
 
     def set_ft_sensor_at(self, joint_id, enable=True):
         if joint_id in self._ft_joints and not enable:
@@ -174,19 +184,21 @@ class BulletRobot(object):
         """
         return self.get_link_pose(link_id=self._ee_link_idx)
 
-    def ee_velocity(self, numerical=False):
+    def ee_velocity(self):
         """
 
-        :param numerical: flag indicating if end-effector velocity should be computed numerically or not.
         :return: end-effector velocity, which includes linear and angular velocities, i.e. (v,omega)
+        :rtype: np.ndarray
         """
 
         return self.get_link_velocity(link_id=self._ee_link_idx)
 
     def get_ee_wrench(self, local=False):
         '''
-            End effector forces and torques.
-            Returns [fx, fy, fz, tx, ty, tz]
+        :param local: if True, computes reaction forces in local sensor frame, else in base frame of robot
+        :type local: bool
+        :return: End effector forces and torques. Returns [fx, fy, fz, tx, ty, tz]
+        :rtype: np.ndarray
         '''
 
         _, _, jnt_reaction_force, _ = self.get_joint_state(self._ft_joints[-1])
@@ -230,8 +242,7 @@ class BulletRobot(object):
 
         :param position: target position
         :param orientation: target orientation in quaternion format (w, x, y , z)
-        :return: joint positions that take the end effector to the desired target position and/or orientation,
-            and success status (solution_found) of IK operation.
+        :return: joint positions that take the end effector to the desired target position and/or orientation, and success status (solution_found) of IK operation.
         """
 
         solution = None
@@ -583,19 +594,17 @@ class BulletRobot(object):
         angles = self.angles()
 
         for k, jnt_index in enumerate(self._movable_joints):
-
             pb.resetJointState(self._id, jnt_index,
                                angles[k], physicsClientId=self._uid)
 
-            if ctrl_type == 'pos':
+        if ctrl_type == 'pos':
 
-                pb.setJointMotorControl2(self._id, jnt_index, pb.POSITION_CONTROL,
-                                         targetPosition=angles[k], force=500, physicsClientId=self._uid)
+            pb.setJointMotorControlArray(self._id, self._movable_joints, pb.POSITION_CONTROL,
+                                         targetPosition=angles, forces=[500]*len(self._movable_joints), physicsClientId=self._uid)
 
-            else:
-
-                pb.setJointMotorControl2(self._id, jnt_index, pb.VELOCITY_CONTROL,
-                                         targetPosition=angles[k], force=0.5, physicsClientId=self._uid)
+        else:
+            pb.setJointMotorControlArray(self._id, self._movable_joints, pb.VELOCITY_CONTROL,
+                                         forces=[0.0]*len(self._movable_joints), physicsClientId=self._uid)
 
     def triangle_mesh(self):
 
